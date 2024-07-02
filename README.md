@@ -1,5 +1,6 @@
 # mouse-to-keyboard-kde-wayland
-Listen to mouse events/presses and emulate key presses on keyboard
+Listen to mouse events/presses and emulate key presses on keyboard  
+Works on Wayland and X11.
 
 
 ## download and install
@@ -51,9 +52,9 @@ $EDITOR ~/.config/mouse-to-keyboard.conf
 ./mouse-to-keyboard.pl -m
 
 # find key codes (KEY_*) to simulate to the app
-./mouse-to-keyboard.pl -m
+./mouse-to-keyboard.pl -k
 
 # create systemd user service to run in background, once you login to KDE
-./mouse-to-keyboard.pl -m
+./mouse-to-keyboard.pl -s
 
 ```
