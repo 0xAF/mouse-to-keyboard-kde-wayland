@@ -49,7 +49,13 @@ if ($arg =~ /^-h$/ || $arg =~ /^--help$/) {
 	exit;
 } elsif ($arg =~ /^-k$/) {
 	init();
-	system("evemu-describe $devices->{$keyboard}->{kernel} | grep KEY_");
+	my $cmd = '(';
+	foreach my $ev (@{$devices->{$keyboard}->{kernel}}) {
+		$cmd .= "evemu-describe $ev;";
+	}
+	$cmd .= ') | grep KEY_ | sort -Vu';
+	printf "CMD: $cmd\n";
+	system($cmd);
 	exit;
 } elsif ($arg =~ /^-d$/) {
 	$DEBUG=1;
@@ -105,27 +111,29 @@ sub keyboard_press_release {
 	my @keys = split(/\s+/, $k);
 	@keys = reverse @keys if (!$p);
 	foreach my $k (@keys) {
-		printf "p[$p]: $k\n" if ($DEBUG);
-		system("evemu-event $devices->{$keyboard}->{kernel} --sync --type EV_KEY --code $k --value $p");
-		select(undef, undef, undef, 0.025) if ($p); # 25ms between keys
+		foreach my $dev (@{$devices->{$keyboard}->{kernel}}) {
+			printf "$dev -- p[$p]: $k\n" if ($DEBUG);
+			system("evemu-event $dev --sync --type EV_KEY --code $k --value $p");
+			select(undef, undef, undef, 0.025) if ($p); # 25ms between keys
+		}
 	}
 }
 
 sub process_events {
 	my $monitor = shift;
-	open(LIBINPUT, "libinput debug-events --device $devices->{$mouse}->{kernel} |");
+	my $devs = join(' --device ', @{$devices->{$mouse}->{kernel}});
+	open(LIBINPUT, "libinput debug-events --device $devs |");
 	while (<LIBINPUT>) {
 		my $event = parse_event($_);
 		next unless ($event && $event->{e});
 		if ($monitor) {
-			printf "EVENT: $event->{e}";
-			printf ", ACTION: $event->{a}" if ($event->{a});
-			printf "\n";
+			printf "EVENT: $event->{e}" . ($event->{a} ? ", ACTION: $event->{a}" : "") . "\n";
 		} else {
 			my $win = get_active_window();
+			# printf "EVENT: $event->{e}" . ($event->{a} ? ", ACTION: $event->{a}" : "") . ", CURRENT_WIN: $win\n" if ($DEBUG);
 			next if ( !$Config->{$win} );
 			my $keys = $Config->{$win}->{$event->{e}};
-			printf "DEBUG: WIN: $win, EVENT: $event->{e}, ACTION: $event->{a}, EMULATE: $keys\n" if ($DEBUG);
+			printf "DEBUG: WIN: $win, EVENT: $event->{e}, ACTION: $event->{a}, EMULATE: ".($keys?$keys:'N/A')."\n" if ($DEBUG);
 			next if ( !$Config->{$win}->{$event->{e}} );
 			keyboard_press_release(1, $keys) if ($event->{a} ne 'released');
 			keyboard_press_release(0, $keys) if ($event->{a} ne 'pressed');
@@ -148,8 +156,8 @@ sub init {
 	die "Cannot find mouse device ($mouse) in libinput. Try -l for list of available devices.\n" unless ($devices->{$mouse});
 	die "Cannot find keyboard device ($keyboard) in libinput. Try -l for list of available devices.\n" unless ($devices->{$keyboard});
 
-	printf "Mouse: $devices->{$mouse}->{kernel} ($mouse)\n";
-	printf "Keyboard: $devices->{$keyboard}->{kernel} ($keyboard)\n";
+	printf "Mouse: $mouse (". join(', ', @{$devices->{$mouse}->{kernel}}) .")\n";
+	printf "Keyboard: $keyboard (". join(', ', @{$devices->{$keyboard}->{kernel}}) .")\n";
 }
 
 sub help {
@@ -258,19 +266,20 @@ sub get_devices {
 			$v =~ s/[\s-]+/_/g;
 			$obj->{lc($k)} = $v;
 		}
-		$devices->{ $obj->{device} . '_' . $obj->{capabilities} } = $obj;
+		# my ($event) = $obj->{kernel} =~ qr|/dev/input/event(\d+)|;
+		if ($devices->{ $obj->{device} }->{kernel}) {
+			push @{$devices->{$obj->{device}}->{kernel}}, $obj->{kernel};
+		} else {
+			$obj->{kernel} = [ $obj->{kernel} ];
+			$devices->{ $obj->{device} } = $obj;
+		}
 	}
 }
 
 sub show_devices {
 	foreach my $k (sort keys %{$devices}) {
-		my $v;
-		format STDOUT =
-@<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<<<<<<<
-'"'.$k.'"', $v
-.
-		$v = $devices->{$k}->{kernel};
-		write;
+		my $v = join(", ", @{$devices->{$k}->{kernel}});
+		print sprintf("%-35s %s\n", '"'.$k.'"', $v);
 	}
 }
 
