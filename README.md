@@ -1,3 +1,6 @@
+# UNMAINTAINED
+it is working, but I'm using `keymapper` now.
+
 # mouse-to-keyboard-kde-wayland
 Listen to mouse events/presses and emulate key presses on keyboard  
 Works on Wayland and X11.
